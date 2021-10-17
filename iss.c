@@ -53,6 +53,9 @@ int update_instructions(char* file_name){ //updates the instructions as binary i
     }
     while (fgets(line, LINELEN, input) != NULL) {
         char* hex = line;
+        int inst;
+        inst = strtoul(hex, NULL, 16);
+        sram[i] = inst;
         hex[8] = '\0';
         strcpy(instructions_hex[i], hex);
         instructions_hex[i][8] = '\0';
@@ -71,10 +74,7 @@ void print_sram(FILE *trace){
         exit(1);
     }
     int i=0;
-    for(i=0; i<num_instructions; i++){
-        fprintf(mem_out, "%s\n", instructions_hex[i]);
-    }
-    for(i = num_instructions; i < SRAMSIZE; i++){
+    for(i = 0; i < SRAMSIZE; i++){
         fprintf(mem_out, "%08x\n", sram[i]);
     }
     fprintf(trace, "sim finished at pc %d, %d instructions", PC, instructions_count+1);
@@ -170,6 +170,10 @@ bool execute_instruction(int immediate, int src1, int src0, int dst, int opcode,
         print_sram(trace);
         exit(0);
     }
+    else{
+        fprintf(stderr, "invalid opcode \n");
+        exit(1);
+    }
 }
 
 void print_trace(int immediate, int src1, int src0, int dst, int opcode, FILE *trace){
@@ -191,10 +195,6 @@ void print_trace(int immediate, int src1, int src0, int dst, int opcode, FILE *t
     }
     else if(opcode == 24){
         fprintf(trace, ">>>> EXEC: HALT at PC %04x<<<<\n", PC);
-    }
-    else{
-        fprintf(stderr, "Can't open trace file \n");
-        exit(1);
     }
 }
 
@@ -218,8 +218,8 @@ int main(int argc, char** argv[]){
         sram[15+i] = i;
     fprintf(trace, "program %s loaded, %d lines\n", argv[1], num_instructions);
     while(true){
-        unsigned int inst;
-        inst = strtol(instructions_hex[PC], NULL, 16); //Converting string to hex
+        int inst;
+        inst = strtoul(instructions_hex[PC], NULL, 16); //Converting string to hex
         // determine opcode
         opcode = inst & 0x3E000000;
         opcode = opcode >> 0x19;
