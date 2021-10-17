@@ -6,17 +6,18 @@
 #include <math.h>
 
 #define OPCODELEN 32
-#fedine REGSNUM 8
+#define REGSNUM 8
 #define SRAMSIZE 65536
 #define MAXPC 65535 //maximum number of instructions 0xFFFF
+#define LINELEN 10
 
 static int PC;
 static int instructions_count = 0;
+static int num_instructions;
 static int sram[SRAMSIZE] = {0};
 static int regs[REGSNUM] = {0};
-static char instructions[MAXPC][33] = {NULL};
 static char instructions_hex[MAXPC][9] = {NULL};
-const char opcodes[25][3] = {"ADD", "SUB", "LSF", "RSF", "AND", "OR", "XOR", "LHI", "LD", "ST", "", "", "", "", "", "", "JLT", "JLE", "JEQ", "JNE", "JIN", "", "", "", "HLT"};
+const char opcodes[25][4] = {"ADD", "SUB", "LSF", "RSF", "AND", "OR", "XOR", "LHI", "LD", "ST", "", "", "", "", "", "", "JLT", "JLE", "JEQ", "JNE", "JIN", "", "", "", "HLT"};
 
 void hex_binary(char* hex, char * res){ //converts an hexa string to binary string
     char binary[16][5] = {"0000", "0001", "0010", "0011", "0100", "0101","0110", "0111", "1000", "1001", "1010", "1011", "1100", "1101", "1110","1111"};
@@ -51,183 +52,204 @@ int update_instructions(char* file_name){ //updates the instructions as binary i
         exit(1);
     }
     while (fgets(line, LINELEN, input) != NULL) {
-        line[8] = '\0';
-        strcpy(instructions_hex[i], line)
-        char binary[33];
-        hex_binary(line, binary);
-        strcpy(instructions[i], binary);
-        i++
+        char* hex = line;
+        hex[8] = '\0';
+        strcpy(instructions_hex[i], hex);
+        instructions_hex[i][8] = '\0';
+        i++;
     }
+    printf("out of loop");
     fclose(input);
+    printf("closed file");
     return i;
 }
 
-void parse_instruction(char* immediate, char* src1, char* src0, char* dst, char* opcode){
-    immediate[16]='\0';
-    strncpy(immediate, &instructions[PC][0], 15);
-    src1[3] = '\0';
-    strncpy(src1, &instructions[PC][16], 3);
-    src0[3] = '\0';
-    strncpy(src0, &instructions[PC][19], 3);
-    dst[3] = '\0';
-    strncpy(dst, &instructions[PC][22], 3);
-    opcode[6] = '\0';
-    strncpy(opcode, &instructions[PC][25], 5);
-    return;
-}
-
-viod print_sram(FILE *trace){
-    FILE *mem_out = fopen("sram_out.txt");
+void print_sram(FILE *trace){
+    FILE *mem_out = fopen("sram_out.txt", "w+");
+    if (mem_out == NULL) {
+        fprintf(stderr, "Can't open sram file \n");
+        exit(1);
+    }
     int i=0;
-    for(i = 0; i < SRAMSIZE; i++){
+    for(i=0; i<num_instructions; i++){
+        fprintf(mem_out, "%s\n", instructions_hex[i]);
+    }
+    for(i = num_instructions; i < SRAMSIZE; i++){
         fprintf(mem_out, "%08x\n", sram[i]);
     }
-    fprintf(trace, "sim finished at pc %D, %D instructions", PC, instructions_count);
+    fprintf(trace, "sim finished at pc %d, %d instructions", PC, instructions_count+1);
     fclose(trace);
     fclose(mem_out);
 }
 
-bool execute_instruction(char* immediate, char* src1, char* src0, char* dst, char* opcode, FILE *trace){//handles op and returns true iff a jump was taken
-    int opcode_num = (int) strtol(opcode, NULL, 2);
-    int dst_num = (int) strtol(dst, NULL, 2);
-    int src0_num = (int) strtol(src0, NULL, 2);
-    int src1_num = (int) strtol(src1, NULL, 2);
-    int imm = (int) strtol(immediate, NULL, 2);
-    if(opcode_num == 0){//ADD
-        regs[dst_num] = regs[src0_num] + regs[src1_num];
+bool execute_instruction(int immediate, int src1, int src0, int dst, int opcode, FILE *trace){//handles op and returns true iff a jump was taken
+    if(opcode == 0){//ADD
+        regs[dst] = regs[src0] + regs[src1];
         return false;
     }
-    if(opcode_num == 1){//SUB
-        regs[dst_num] = regs[src0_num] - regs[src1_num];
+    else if(opcode == 1){//SUB
+        regs[dst] = regs[src0] - regs[src1];
         return false;
     }
-    if(opcode_num == 2){//LSF
-        regs[dst_num] = regs[src0_num] << regs[src1_num];
+    else if(opcode == 2){//LSF
+        regs[dst] = regs[src0] << regs[src1];
         return false;
     }
-    if(opcode_num == 3){//RSF
-        regs[dst_num] = regs[src0_num] >> regs[src1_num];
+    else if(opcode == 3){//RSF
+        regs[dst] = regs[src0] >> regs[src1];
         return false;
     }
-    if(opcode_num == 4){//AND
-        regs[dst_num] = regs[src0_num] & regs[src1_num];
+    else if(opcode == 4){//AND
+        regs[dst] = regs[src0] & regs[src1];
         return false;
     }
-    if(opcode_num == 5){//OR
-        regs[dst_num] = regs[src0_num] | regs[src1_num];
+    else if(opcode == 5){//OR
+        regs[dst] = regs[src0] | regs[src1];
         return false;
     }
-    if(opcode_num == 6){//XOR
-        regs[dst_num] = regs[src0_num] ^ regs[src1_num];
+    else if(opcode == 6){//XOR
+        regs[dst] = regs[src0] ^ regs[src1];
         return false;
     }
-    if(opcode_num == 7){//LHI
-        regs[dst_num] = imm << 16;//needs to do
+    else if(opcode == 7){//LHI
+        regs[dst] = regs[dst] & 0x0000ffff;
+        int immediate_high = immediate << 0x10;
+        regs[dst] = regs[dst] | immediate_high;
         return false;
     }
-    if(opcode_num == 8){//LD
-        regs[dst_num] = sram[regs[src1_num]];
+    else if(opcode == 8){//LD
+        regs[dst] = sram[regs[src1]];
         return false;
     }
-    if(opcode_num == 9){//ST
-        sram[regs[src1_num]] = regs[src0_num];
+    else if(opcode == 9){//ST
+        sram[regs[src1]] = regs[src0];
         return false;
     }
-    if(opcode_num == 16){//JLT
-        if(regs[src0_num] < regs[src1_num])
+    else if(opcode == 16){//JLT
+        if(regs[src0] < regs[src1])
         {
             regs[7] = PC;
-            PC = imm;
+            PC = immediate;
             return true;
         }
         return false;
     }
-    if(opcode_num == 17){//JLE
-        if(regs[src0_num] <= regs[src1_num])
+    else if(opcode == 17){//JLE
+        if(regs[src0] <= regs[src1])
         {
             regs[7] = PC;
-            PC = imm;
+            PC = immediate;
             return true;
         }
         return false;
     }
-    if(opcode_num == 18){//JEQ
-        if(regs[src0_num] == regs[src1_num])
+    else if(opcode == 18){//JEQ
+        if(regs[src0] == regs[src1])
         {
             regs[7] = PC;
-            PC = imm;
+            PC = immediate;
             return true;
         }
         return false;
     }
-    if(opcode_num == 19){//JNE
-        if(regs[src0_num] != regs[src1_num])
+    else if(opcode == 19){//JNE
+        if(regs[src0] != regs[src1])
         {
             regs[7] = PC;
-            PC = imm;
+            PC = immediate;
             return true;
         }
         return false;
     }
-    if(opcode_num == 20){//JIN
+    else if(opcode == 20){//JIN
         regs[7] = PC;
-        PC = imm;
+        PC = immediate;
         return true;
     }
-    if(opcode_num == 24){//HLT
+    else if(opcode == 24){//HLT
         print_sram(trace);
         exit(0);
     }
 }
 
-void print_trace(char* immediate, char* src1, char* src0, char* dst, char* opcode, FILE *trace){
-    int opcode_num = (int) strtol(opcode, NULL, 2);
-    int dst_num = (int) strtol(dst, NULL, 2);
-    int src0_num = (int) strtol(src0, NULL, 2);
-    int src1_num = (int) strtol(src1, NULL, 2);
-    int imm = (int) strtol(immediate, NULL, 2);
+void print_trace(int immediate, int src1, int src0, int dst, int opcode, FILE *trace){
     fprintf(trace, "--- instruction %d (%04x) @ PC %d (%04x) -----------------------------------------------------------\n",
             instructions_count, instructions_count, PC, PC);
-    fprintf(trace, "pc = %04x, inst = %s, opcode = %d (%s), ", vals[0], instructions_hex[PC], opcode_num, opcodes[opcode_num]);
-    fprintf(trace, "dst = %d, src0 = %d, src1 = %d, immediate = %08x\n", dst_num, src0_num, src1_num, imm);
+    fprintf(trace, "pc = %04d, inst = %s, opcode = %d (%s), ", PC, instructions_hex[PC], opcode, opcodes[opcode]);
+    fprintf(trace, "dst = %d, src0 = %d, src1 = %d, immediate = %08x\n", dst, src0, src1, immediate);
     fprintf(trace, "r[0] = %08x r[1] = %08x r[2] = %08x r[3] = %08x \nr[4] = %08x r[5] = %08x r[6] = %08x r[7] = %08x \n\n",
             regs[0], regs[1], regs[2], regs[3], regs[4], regs[5], regs[6], regs[7]);
 
-    if(opcode_num <= 7){
-        fprintf(trace, ">>>> EXEC: R[%d] = %d %s %d <<<<\n\n", dst_num, regs[src0_num], opcodes[opcode_num], regs[src1_num]);
+    if(opcode <= 7){
+        fprintf(trace, ">>>> EXEC: R[%d] = %d %s %d <<<<\n\n", dst, regs[src0], opcodes[opcode], regs[src1]);
     }
-    else if(opcode_num == 8){
-        fprintf(trace_p, ">>>> EXEC: R[%d] = MEM[%d] = %08x <<<<\n\n", dst_num, regs[src1_num], sram[src1_num]);
+    else if(opcode == 8){
+        fprintf(trace, ">>>> EXEC: R[%d] = MEM[%d] = %08x <<<<\n\n", dst, regs[src1], sram[regs[src1]]);
     }
-    else if(opcode_num == 9){
-        fprintf(trace_p, ">>>> EXEC: MEM[%d] = R[%d] = %08x <<<<\n\n", regs[src1_num], src0_num, regs[src0_num]);
+    else if(opcode == 9){
+        fprintf(trace, ">>>> EXEC: MEM[%d] = R[%d] = %08x <<<<\n\n", regs[src1], src0, regs[src0]);
     }
-    else if(opcode_num == 24){
-        fprintf(trace_p, ">>>> EXEC: HALT at PC %04x<<<<\n", PC);
+    else if(opcode == 24){
+        fprintf(trace, ">>>> EXEC: HALT at PC %04x<<<<\n", PC);
+    }
+    else{
+        fprintf(stderr, "Can't open trace file \n");
+        exit(1);
     }
 }
 
-print_trace_jump(char* src1, char* src0, char* opcode, FILE *trace){
-    int opcode_num = (int) strtol(opcode, NULL, 2);
-    int src0_num = (int) strtol(src0, NULL, 2);
-    int src1_num = (int) strtol(src1, NULL, 2);
-    fprintf(trace_p, ">>>> EXEC: %s %d, %d, %d <<<<\n\n", opcodes[opcode_num], regs[src0_num],regs[src1_num], PC);
+void print_trace_jump(int src1, int src0, int opcode, FILE *trace){
+    fprintf(trace, ">>>> EXEC: %s %d, %d, %d <<<<\n\n", opcodes[opcode], regs[src0],regs[src1], PC);
 }
 
 
 int main(int argc, char** argv[]){
-    char* input_name = argv[0];
-    int num_instructions = update_instructions(input_name);
+    char* input_name = argv[1];
+    int opcode = 0, dst = 0, src0 = 0, src1 = 0, immediate = 0, i;
+    num_instructions = update_instructions(input_name);
+    printf("num of lines=%d\n", num_instructions);
     PC=0;
-    FILE *trace = fopen("trace.txt");
-    fprintf(trace, "program %s loaded, %d lines\n", argv[0], num_instructions);
+    FILE *trace = fopen("trace.txt", "w+");
+    if (trace == NULL) {
+        fprintf(stderr, "Can't open trace file \n");
+        exit(1);
+    }
+    for (i = 0; i < 8; i++)
+        sram[15+i] = i;
+    fprintf(trace, "program %s loaded, %d lines\n", argv[1], num_instructions);
     while(true){
-        char immediate[20], src1[20], src0[20], dst[20], opcode[20];
-        parse_instruction(immediate, src1, src0, dst, opcode);
-        int imm = (int) strtol(immediate, NULL, 2);
-        regs[1] = imm;
-        print_trace(char* immediate, char* src1, char* src0, char* dst, char* opcode, FILE *trace);
-        bool jump_taken = execute_instruction(immediate, src1, src0, dst, opcode);
+        unsigned int inst;
+        inst = strtol(instructions_hex[PC], NULL, 16); //Converting string to hex
+        // determine opcode
+        opcode = inst & 0x3E000000;
+        opcode = opcode >> 0x19;
+        //determine destination register
+        dst = inst & 0x01c00000;
+        dst = dst >> 0x16;
+        if(dst < 0 || dst > 7){
+            fprintf(stderr, "invalid reg number\n");
+            exit(1);
+        }
+        //determine src0
+        src0 = inst & 0x00380000;
+        src0 = src0 >> 0x13;
+        if(src0 < 0 || src0 > 7){
+            fprintf(stderr, "invalid reg number\n");
+            exit(1);
+        }
+        //determine src1
+        src1 = inst & 0x00070000;
+        src1 = src1 >> 0x10;
+        if(src1 < 0 || src1 > 7){
+            fprintf(stderr, "invalid reg number\n");
+            exit(1);
+        }
+        //determine immediate
+        immediate = inst & 0x0000ffff;
+        printf("imm=%d, src1=%d src0=%d, dst=%d, opcode=%d\n",immediate, src1, src0, dst, opcode );
+        regs[1] = immediate;
+        print_trace(immediate, src1, src0, dst, opcode, trace);
+        bool jump_taken = execute_instruction(immediate, src1, src0, dst, opcode, trace);
         if(!jump_taken){
             if(PC == MAXPC){
                 PC=0;
@@ -236,7 +258,8 @@ int main(int argc, char** argv[]){
                 PC++;
             }
         }
-        print_trace_jump(char* src1, char* src0, char* opcode, FILE *trace)
+        if(opcode>=16 && opcode<=20)
+            print_trace_jump( src1, src0, opcode, trace);
         instructions_count++;
     }
     exit(1);
